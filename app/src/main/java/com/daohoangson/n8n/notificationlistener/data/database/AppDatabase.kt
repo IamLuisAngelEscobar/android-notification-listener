@@ -7,13 +7,14 @@ import android.content.Context
 import com.daohoangson.n8n.notificationlistener.utils.Constants
 
 @Database(
-    entities = [FailedNotification::class, UndecidedNotification::class],
+    entities = [FailedNotification::class, UndecidedNotification::class, PendingCapture::class],
     version = Constants.DATABASE_VERSION,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun failedNotificationDao(): FailedNotificationDao
     abstract fun undecidedNotificationDao(): UndecidedNotificationDao
+    abstract fun pendingCaptureDao(): PendingCaptureDao
     
     companion object {
         @Volatile

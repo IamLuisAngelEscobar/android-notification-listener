@@ -25,4 +25,6 @@ object NetworkModule {
         .build()
     
     val webhookApi: WebhookApi = retrofit.create(WebhookApi::class.java)
+
+    val ingestApi: IngestApi = retrofit.create(IngestApi::class.java)
 }

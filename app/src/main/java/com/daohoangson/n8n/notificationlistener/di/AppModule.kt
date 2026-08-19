@@ -1,10 +1,14 @@
 package com.daohoangson.n8n.notificationlistener.di
 
 import android.content.Context
+import com.daohoangson.n8n.notificationlistener.BuildConfig
 import com.daohoangson.n8n.notificationlistener.data.database.AppDatabase
 import com.daohoangson.n8n.notificationlistener.data.database.FailedNotificationDao
+import com.daohoangson.n8n.notificationlistener.data.database.PendingCaptureDao
 import com.daohoangson.n8n.notificationlistener.data.database.UndecidedNotificationDao
 import com.daohoangson.n8n.notificationlistener.data.repository.NotificationRepository
+import com.daohoangson.n8n.notificationlistener.fcc.IngestEndpoint
+import com.daohoangson.n8n.notificationlistener.network.IngestApi
 import com.daohoangson.n8n.notificationlistener.network.NetworkModule
 import com.daohoangson.n8n.notificationlistener.network.WebhookApi
 import dagger.Module
@@ -35,9 +39,30 @@ object AppModule {
     }
 
     @Provides
-    @Singleton  
+    fun providePendingCaptureDao(database: AppDatabase): PendingCaptureDao {
+        return database.pendingCaptureDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideWebhookApi(): WebhookApi {
         return NetworkModule.webhookApi
+    }
+
+    @Provides
+    @Singleton
+    fun provideIngestApi(): IngestApi {
+        return NetworkModule.ingestApi
+    }
+
+    @Provides
+    @Singleton
+    fun provideIngestEndpoint(): IngestEndpoint {
+        // Injected at build time from local.properties (kept out of VCS).
+        return IngestEndpoint(
+            url = BuildConfig.FCC_INGEST_URL,
+            secret = BuildConfig.FCC_INGEST_SECRET,
+        )
     }
 
     @Provides

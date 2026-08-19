@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,17 @@ plugins {
     alias(libs.plugins.ksp)
     id("dagger.hilt.android.plugin")
 }
+
+// FCC: the Tailscale endpoint + shared secret are injected from local.properties
+// (gitignored), so the secret never lands in the fork repo. Set these two keys:
+//   fcc.ingest.url=http://100.72.37.0:8000/ingest
+//   fcc.ingest.secret=<FCC_INGEST_SECRET>
+val fccProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val fccIngestUrl: String = fccProps.getProperty("fcc.ingest.url", "")
+val fccIngestSecret: String = fccProps.getProperty("fcc.ingest.secret", "")
 
 android {
     namespace = "com.daohoangson.n8n.notificationlistener"
@@ -18,6 +31,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "FCC_INGEST_URL", "\"$fccIngestUrl\"")
+        buildConfigField("String", "FCC_INGEST_SECRET", "\"$fccIngestSecret\"")
     }
 
     buildTypes {
@@ -69,6 +85,11 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // WorkManager + Hilt integration (auto-drain of the capture buffer)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Testing
     testImplementation(libs.junit)
