@@ -19,7 +19,12 @@ object NetworkModule {
         .writeTimeout(Constants.NETWORK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
     
+    // Retrofit requires a base URL even though every call passes an absolute
+    // @Url (the ingest endpoint comes from BuildConfig at call time). This
+    // placeholder only satisfies that requirement; the absolute @Url overrides
+    // it per request. Without it, Retrofit.build() throws "Base URL required."
     private val retrofit = Retrofit.Builder()
+        .baseUrl("http://localhost/")
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
