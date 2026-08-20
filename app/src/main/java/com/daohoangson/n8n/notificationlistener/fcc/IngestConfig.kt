@@ -47,7 +47,9 @@ object IngestConfig {
 
     val rules: List<AccountRule> = listOf(
         AccountRule(
-            packageName = "com.bbva.bbvamovil",
+            // BBVA México (formerly Bancomer). Confirmed on-device via the
+            // notification's sbn.packageName. (BBVA Spain is com.bbva.bbvamovil.)
+            packageName = "com.bancomer.mbanking",
             account = "BBVA Debit",
             defaultCurrency = "MXN",
             amountRegex = MONEY,

@@ -33,7 +33,7 @@ class IngestTransformTest {
     @Test
     fun bbva_debit_purchase_maps_account_amount_currency() {
         val result = IngestTransform.transform(
-            notif("com.bbva.bbvamovil", title = "BBVA", text = "Compra por \$250.00 en OXXO ROMA NORTE"),
+            notif("com.bancomer.mbanking", title = "BBVA", text = "Compra por \$250.00 en OXXO ROMA NORTE"),
             zone = mexicoCity,
         )
         val p = ingestable(result)
@@ -42,6 +42,20 @@ class IngestTransformTest {
         assertEquals("MXN", p.currency)
         assertTrue(p.description.contains("OXXO ROMA NORTE"))
         assertEquals("2026-08-14T20:15:00-06:00", p.occurred_at)
+    }
+
+    @Test
+    fun bbva_mx_abono_deposit_parses() {
+        // Real BBVA México deposit wording observed on-device (2026-08-20).
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("com.bancomer.mbanking", title = "BBVA", text = "Abono a tu cuenta de \$100"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("BBVA Debit", p.account)
+        assertEquals(100.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
     }
 
     @Test
@@ -60,7 +74,7 @@ class IngestTransformTest {
     fun thousands_separator_is_stripped() {
         val p = ingestable(
             IngestTransform.transform(
-                notif("com.bbva.bbvamovil", text = "Cargo por MXN 1,234.56 en AMAZON"),
+                notif("com.bancomer.mbanking", text = "Cargo por MXN 1,234.56 en AMAZON"),
                 zone = mexicoCity,
             )
         )
@@ -72,7 +86,7 @@ class IngestTransformTest {
     fun explicit_us_dollar_token_overrides_default_currency() {
         val p = ingestable(
             IngestTransform.transform(
-                notif("com.bbva.bbvamovil", text = "Compra por US\$12.00 en APPLE"),
+                notif("com.bancomer.mbanking", text = "Compra por US\$12.00 en APPLE"),
                 zone = mexicoCity,
             )
         )
@@ -83,7 +97,7 @@ class IngestTransformTest {
     fun amount_is_always_positive() {
         val p = ingestable(
             IngestTransform.transform(
-                notif("com.bbva.bbvamovil", text = "Compra por \$99.99 en SPOTIFY"),
+                notif("com.bancomer.mbanking", text = "Compra por \$99.99 en SPOTIFY"),
                 zone = mexicoCity,
             )
         )
@@ -99,7 +113,7 @@ class IngestTransformTest {
     @Test
     fun otp_noise_from_bank_app_is_dropped() {
         val result = IngestTransform.transform(
-            notif("com.bbva.bbvamovil", text = "Tu código de verificación es 123456"),
+            notif("com.bancomer.mbanking", text = "Tu código de verificación es 123456"),
             zone = mexicoCity,
         )
         assertTrue(result is TransformResult.Dropped)
@@ -108,7 +122,7 @@ class IngestTransformTest {
     @Test
     fun balance_ping_without_amount_is_dropped() {
         val result = IngestTransform.transform(
-            notif("com.bbva.bbvamovil", text = "Bienvenido de nuevo a BBVA Movil"),
+            notif("com.bancomer.mbanking", text = "Bienvenido de nuevo a BBVA Movil"),
             zone = mexicoCity,
         )
         assertTrue(result is TransformResult.Dropped)
@@ -117,10 +131,10 @@ class IngestTransformTest {
     @Test
     fun reference_and_occurred_at_are_stable_for_identical_input() {
         val a = ingestable(
-            IngestTransform.transform(notif("com.bbva.bbvamovil", text = "Compra por \$77.00 en UBER"), zone = mexicoCity)
+            IngestTransform.transform(notif("com.bancomer.mbanking", text = "Compra por \$77.00 en UBER"), zone = mexicoCity)
         )
         val b = ingestable(
-            IngestTransform.transform(notif("com.bbva.bbvamovil", text = "Compra por \$77.00 en UBER"), zone = mexicoCity)
+            IngestTransform.transform(notif("com.bancomer.mbanking", text = "Compra por \$77.00 en UBER"), zone = mexicoCity)
         )
         assertEquals("reference must be deterministic (idempotency)", a.source.reference, b.source.reference)
         assertEquals("occurred_at must be deterministic (idempotency)", a.occurred_at, b.occurred_at)
@@ -130,7 +144,7 @@ class IngestTransformTest {
     fun serialized_body_carries_only_the_allowed_keys() {
         // The server model is extra="forbid"; a stray key would be a 422.
         val p = ingestable(
-            IngestTransform.transform(notif("com.bbva.bbvamovil", text = "Compra por \$10.00 en OXXO"), zone = mexicoCity)
+            IngestTransform.transform(notif("com.bancomer.mbanking", text = "Compra por \$10.00 en OXXO"), zone = mexicoCity)
         )
         val json = JsonParser.parseString(p.toJson()).asJsonObject
         assertEquals(
