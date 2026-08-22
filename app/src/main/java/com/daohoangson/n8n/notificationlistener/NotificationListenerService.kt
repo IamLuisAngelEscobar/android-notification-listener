@@ -5,6 +5,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCapture
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCaptureDao
+import com.daohoangson.n8n.notificationlistener.fcc.CaptureAudit
 import com.daohoangson.n8n.notificationlistener.fcc.IngestTransform
 import com.daohoangson.n8n.notificationlistener.fcc.TransformResult
 import com.daohoangson.n8n.notificationlistener.utils.NotificationData
@@ -54,6 +55,15 @@ class NotificationListenerService : NotificationListenerService() {
             is TransformResult.Dropped -> {
                 // Filtered on-device; nothing leaves the phone.
                 Log.d(TAG, "dropped ${data.packageName}: ${result.reason}")
+                // TEMP (#66 validation): persist drops from TRACKED apps only, so a
+                // week of real notifications can be reviewed for a wrongly-dropped
+                // purchase. Skip the high-volume untracked-app noise. Remove with CaptureAudit.
+                if (!result.reason.startsWith("not a tracked financial app")) {
+                    CaptureAudit.record(
+                        applicationContext, data.packageName, data.title, data.text,
+                        outcome = "dropped", detail = result.reason,
+                    )
+                }
             }
             is TransformResult.Ingestable -> {
                 // Buffer BEFORE any network call: this is the fail-safe (Branch 17).
@@ -70,6 +80,12 @@ class NotificationListenerService : NotificationListenerService() {
                     return
                 }
                 IngestScheduler.drainNow(applicationContext)
+                // TEMP (#66 validation): mirror captures into the audit trail. Remove with CaptureAudit.
+                CaptureAudit.record(
+                    applicationContext, data.packageName, data.title, data.text,
+                    outcome = "captured",
+                    detail = "${payload.account} ${payload.amount} ${payload.currency}",
+                )
             }
         }
     }
