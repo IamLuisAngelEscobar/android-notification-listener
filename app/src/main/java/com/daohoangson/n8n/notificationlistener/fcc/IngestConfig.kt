@@ -64,6 +64,45 @@ object IngestConfig {
             currencyRegex = CURRENCY,
             dropRegex = NOISE,
         ),
+        // ── Multi-bank rollout, batch 1 (#66) ──────────────────────────────────
+        // Starting-point rules: package names confirmed installed on the S25
+        // (2026-08-20); the amount/noise regexes are the generic MXN defaults,
+        // tuned against real captured wording during on-device verify.
+        AccountRule(
+            // Mercado Pago wallet → seeded "Mercado Pago" (bank/debit).
+            packageName = "com.mercadopago.wallet",
+            account = "Mercado Pago",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
+        AccountRule(
+            packageName = "mx.bancosantander.supermovil",
+            account = "Santander Credit",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
+        AccountRule(
+            packageName = "mx.openbank.modelbank",
+            account = "Openbank Credit",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
+        AccountRule(
+            // DiDi Finanzas / crédito. Note: the rideshare app is a different
+            // package (com.didiglobal.passenger) — this is the cashloan one.
+            packageName = "com.didiglobal.cashloan",
+            account = "Didi Credit",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
     )
 
     fun ruleFor(packageName: String): AccountRule? =

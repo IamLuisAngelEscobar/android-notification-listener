@@ -70,6 +70,61 @@ class IngestTransformTest {
         assertEquals("USD", p.currency)
     }
 
+    // ── Multi-bank rollout, batch 1 (#66): package → account mapping ──────────
+    // Starting-point cases; refine the wording against real captures on-device.
+
+    @Test
+    fun mercado_pago_purchase_maps_to_bank_account() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("com.mercadopago.wallet", text = "Pagaste \$320.00 en RAPPI con tu dinero disponible"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Mercado Pago", p.account)
+        assertEquals(320.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
+    @Test
+    fun santander_credit_charge_maps_to_credit_account() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("mx.bancosantander.supermovil", text = "Cargo por \$1,500.00 en LIVERPOOL con tu tarjeta"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Santander Credit", p.account)
+        assertEquals(1500.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
+    @Test
+    fun openbank_credit_charge_maps_to_credit_account() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("mx.openbank.modelbank", text = "Compra por \$89.50 en SPOTIFY"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Openbank Credit", p.account)
+        assertEquals(89.50, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
+    @Test
+    fun didi_credit_charge_maps_to_credit_account() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("com.didiglobal.cashloan", text = "Cargo por \$250.00 a tu línea DiDi"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Didi Credit", p.account)
+        assertEquals(250.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
     @Test
     fun thousands_separator_is_stripped() {
         val p = ingestable(
