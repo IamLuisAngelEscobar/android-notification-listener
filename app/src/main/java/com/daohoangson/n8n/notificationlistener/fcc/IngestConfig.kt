@@ -123,6 +123,24 @@ object IngestConfig {
             currencyRegex = CURRENCY,
             dropRegex = NOISE,
         ),
+        // ── Google Wallet tap-to-pay (ADR-0013, Track A) ───────────────────────
+        // Wallet posts "You paid $X at Y with <card>" on every tap-to-pay, so it
+        // captures like any other notification source — no new permission (it
+        // rides the existing Notification Access grant). Its own seeded account
+        // rather than the underlying card: a Wallet tap and the card's own bank
+        // push are the same purchase, so a distinct account keeps provenance
+        // honest and lets backend reconciliation (financial-command-center#69)
+        // merge them. The "Google Wallet" account is seeded backend-side
+        // (financial-command-center#73). Amount/noise regexes are the generic MXN
+        // defaults — tune against real Wallet wording on-device.
+        AccountRule(
+            packageName = "com.google.android.apps.walletnfcrel",
+            account = "Google Wallet",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
     )
 
     fun ruleFor(packageName: String): AccountRule? =

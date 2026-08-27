@@ -131,6 +131,24 @@ class IngestTransformTest {
     }
 
     @Test
+    fun google_wallet_tap_maps_to_account() {
+        // ADR-0013 Track A: Wallet posts "You paid $X at Y with <card>" on a
+        // tap-to-pay; it maps to the seeded "Google Wallet" account (not the card).
+        val p = ingestable(
+            IngestTransform.transform(
+                notif(
+                    "com.google.android.apps.walletnfcrel",
+                    text = "You paid \$85.00 at STARBUCKS with Amex ••1009",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Google Wallet", p.account)
+        assertEquals(85.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
+    @Test
     fun thousands_separator_is_stripped() {
         val p = ingestable(
             IngestTransform.transform(
