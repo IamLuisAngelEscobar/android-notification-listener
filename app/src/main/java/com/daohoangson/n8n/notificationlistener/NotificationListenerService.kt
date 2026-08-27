@@ -5,6 +5,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCapture
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCaptureDao
+import com.daohoangson.n8n.notificationlistener.data.repository.NotificationRepository
 import com.daohoangson.n8n.notificationlistener.fcc.IngestTransform
 import com.daohoangson.n8n.notificationlistener.fcc.TransformResult
 import com.daohoangson.n8n.notificationlistener.utils.NotificationData
@@ -34,6 +35,9 @@ class NotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var pendingCaptureDao: PendingCaptureDao
 
+    @Inject
+    lateinit var repository: NotificationRepository
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
 
@@ -52,8 +56,19 @@ class NotificationListenerService : NotificationListenerService() {
     private suspend fun processNotification(data: NotificationData) {
         when (val result = IngestTransform.transform(data)) {
             is TransformResult.Dropped -> {
-                // Filtered on-device; nothing leaves the phone.
-                Log.d(TAG, "dropped ${data.packageName}: ${result.reason}")
+                if (result.fromTrackedSource) {
+                    // A tracked financial app we still couldn't parse (noise / no
+                    // amount): record it so the capture miss-rate is measurable
+                    // instead of guessed (ADR-0013 §4). No payload leaves the phone.
+                    repository.storeUndecidedNotification(
+                        payload = data.toJson(),
+                        reason = result.reason,
+                        notificationData = data,
+                    )
+                } else {
+                    // Some unrelated app: nothing leaves the phone, nothing logged.
+                    Log.d(TAG, "dropped ${data.packageName}: ${result.reason}")
+                }
             }
             is TransformResult.Ingestable -> {
                 // Buffer BEFORE any network call: this is the fail-safe (Branch 17).

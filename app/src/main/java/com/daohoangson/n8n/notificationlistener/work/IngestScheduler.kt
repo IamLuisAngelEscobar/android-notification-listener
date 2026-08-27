@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 object IngestScheduler {
     private const val UNIQUE_NOW = "fcc-ingest-drain-now"
     private const val UNIQUE_PERIODIC = "fcc-ingest-drain-periodic"
+    private const val UNIQUE_SMS_SWEEP = "fcc-sms-sweep-periodic"
 
     private val constraints = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -45,5 +46,19 @@ object IngestScheduler {
             .build()
         WorkManager.getInstance(context)
             .enqueueUniquePeriodicWork(UNIQUE_PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
+    /**
+     * Periodic READ_SMS sweep (ADR-0013) that re-reads the inbox for any tracked
+     * SMS the live [com.daohoangson.n8n.notificationlistener.SmsReceiver] missed.
+     * Deliberately has **no** network constraint — reading SMS into the buffer
+     * works offline; the drain worker handles delivery.
+     */
+    fun ensurePeriodicSmsSweep(context: Context) {
+        val request = PeriodicWorkRequestBuilder<SmsSweepWorker>(6, TimeUnit.HOURS)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(context)
+            .enqueueUniquePeriodicWork(UNIQUE_SMS_SWEEP, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 }
