@@ -56,6 +56,8 @@ class NotificationRepository @Inject constructor(
                 reason = reason
             )
             undecidedNotificationDao.insertUndecidedNotification(undecidedNotification)
+            // Bound the table so months of skips can't grow it without limit (#70).
+            undecidedNotificationDao.trimToMostRecent(MAX_UNDECIDED)
         }
     }
     
@@ -139,5 +141,10 @@ class NotificationRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             failedNotificationDao.deleteFailedNotifications(notifications)
         }
+    }
+
+    companion object {
+        // Cap on retained skip records; the newest are the ones worth eyeballing.
+        private const val MAX_UNDECIDED = 500
     }
 }

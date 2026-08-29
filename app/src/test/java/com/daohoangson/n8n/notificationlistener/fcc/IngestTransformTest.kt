@@ -30,6 +30,11 @@ class IngestTransformTest {
         return (result as TransformResult.Ingestable).payload
     }
 
+    private fun dropped(result: TransformResult): TransformResult.Dropped {
+        assertTrue("expected Dropped but was $result", result is TransformResult.Dropped)
+        return result as TransformResult.Dropped
+    }
+
     @Test
     fun bbva_debit_purchase_maps_account_amount_currency() {
         val result = IngestTransform.transform(
@@ -209,5 +214,72 @@ class IngestTransformTest {
         val allowedSourceKeys = setOf("reference", "app", "raw_text")
         assertTrue(json.getAsJsonObject("source").keySet().all { it in allowedSourceKeys })
         assertTrue("reference is required", json.getAsJsonObject("source").has("reference"))
+    }
+
+    // ── ADR-0013: SMS source (DiDi balance / cashloan) ───────────────────────
+
+    @Test
+    fun didi_sms_charge_maps_to_account_amount_currency() {
+        val result = IngestTransform.transformSms(
+            sender = "DiDi",
+            body = "DiDi: Cargo por \$250.00 de tu linea de credito",
+            timestamp = fixedTs,
+            zone = mexicoCity,
+        )
+        val p = ingestable(result)
+        assertEquals("Didi Credit", p.account)
+        assertEquals(250.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+        assertEquals("sms:DiDi", p.source.app)
+        assertTrue("sms reference is namespaced", p.source.reference.startsWith("sms-"))
+        assertEquals("2026-08-14T20:15:00-06:00", p.occurred_at)
+    }
+
+    @Test
+    fun sms_reference_is_stable_and_independent_of_timestamp() {
+        // The live broadcast and the READ_SMS sweep can see different timestamps
+        // for the same message; the reference must ignore the clock so the sweep
+        // re-reading a broadcast-captured SMS is a duplicate no-op, not a 2nd row.
+        val a = ingestable(
+            IngestTransform.transformSms("DiDi", "Cargo por \$99.00 en UBER", fixedTs, mexicoCity)
+        )
+        val b = ingestable(
+            IngestTransform.transformSms("DiDi", "Cargo por \$99.00 en UBER", fixedTs + 5_000L, mexicoCity)
+        )
+        assertEquals("sms reference must not depend on timestamp", a.source.reference, b.source.reference)
+    }
+
+    @Test
+    fun untracked_sms_sender_is_dropped_and_not_from_tracked_source() {
+        // Body has a parseable amount, but the sender isn't ours: dropped before
+        // parsing, and NOT recorded to undecided (would flood on every OTP/promo).
+        val d = dropped(IngestTransform.transformSms("VERIZON", "You used \$50 of data", fixedTs, mexicoCity))
+        assertTrue("untracked sender must not be a tracked-source drop", !d.fromTrackedSource)
+    }
+
+    @Test
+    fun didi_sms_without_amount_is_a_tracked_source_drop() {
+        // A DiDi SMS we can't parse a spend from IS worth recording (miss-rate).
+        val d = dropped(IngestTransform.transformSms("DiDi", "Bienvenido a DiDi, tu app de movilidad", fixedTs, mexicoCity))
+        assertTrue("a tracked sender with no amount should be recorded", d.fromTrackedSource)
+    }
+
+    // ── ADR-0013 §4: the tracked-source flag on notification drops ────────────
+
+    @Test
+    fun tracked_app_noise_drop_is_from_tracked_source() {
+        val d = dropped(
+            IngestTransform.transform(
+                notif("com.bancomer.mbanking", text = "Tu código de verificación es 123456"),
+                zone = mexicoCity,
+            )
+        )
+        assertTrue("a tracked app we couldn't parse should be recorded", d.fromTrackedSource)
+    }
+
+    @Test
+    fun untracked_app_drop_is_not_from_tracked_source() {
+        val d = dropped(IngestTransform.transform(notif("com.slack", text = "New message"), zone = mexicoCity))
+        assertTrue("an unrelated app must not flood undecided", !d.fromTrackedSource)
     }
 }

@@ -6,8 +6,9 @@ adapted to capture bank/credit-card push notifications and post them to the
 Financial Command Center `/ingest` endpoint over Tailscale.
 
 It implements the capture side of **Slice 4** (issue #53, PRD #49) per **ADR-0012**
-in the main repo. No banking credentials, no Plaid — capture is from notifications
-only.
+in the main repo, extended to **multi-source capture** per **ADR-0013**
+(notifications **+ SMS**). No banking credentials, no Plaid — capture is from
+on-device notifications and SMS only.
 
 ## The three scoped changes vs. upstream
 
@@ -25,6 +26,39 @@ only.
 The capture service (`NotificationListenerService.kt`) and the app
 (`NotificationListenerApplication.kt`, `di/AppModule.kt`, `AndroidManifest.xml`)
 were rewired to this buffer-first flow.
+
+## Multi-source capture (ADR-0013)
+
+Some spends never appear as an app notification. **DiDi balance / cashloan**
+alerts arrive only by **SMS** (via Google Messages), with no bank push behind
+them — so the notification listener alone can never see them. ADR-0013 adds SMS
+as a **first-class, reliable source** and moves cross-source de-duplication to
+the backend.
+
+- **SMS source (issue #68).** `SmsReceiver.kt` captures the SMS *itself* (a
+  `RECEIVE_SMS` `BroadcastReceiver`, not the Messages notification), and
+  `work/SmsSweepWorker.kt` is a periodic `READ_SMS` inbox sweep that backstops a
+  broadcast missed while the app was dead. Both feed the **same** buffer-first
+  flow via `IngestTransform.transformSms(...)` (pure, unit-tested) and a
+  sender-keyed `SmsRule` in `fcc/IngestConfig.kt`. SMS captures tag
+  `source.app = "sms:<sender>"`. Reading the SMS removes the "did a notification
+  pop?" failure entirely — the OS persists every SMS regardless.
+- **Skip-logging / miss-rate (issue #70).** A drop from a *tracked* source
+  (a known app/sender we still couldn't parse) is now recorded in
+  `undecided_notifications` (bounded), so the capture miss-rate is measurable
+  instead of guessed. Untracked apps/senders are still black-holed so the table
+  doesn't flood. Driven by `TransformResult.Dropped.fromTrackedSource`.
+- **Reconciliation (issue #69) is backend-only.** One real spend can arrive from
+  several sources (bank push + Google Wallet + SMS); the fuzzy corroborate /
+  insert / route-to-Inbox logic lives at `/ingest`, not here. This fork only
+  emits the `source.app` provenance that logic relies on — no change needed for
+  reconciliation itself.
+
+> ⚠️ **SMS rules are a starting point.** `IngestConfig.smsRules` matches the DiDi
+> sender by `(?i)didi` and maps to the seeded **`Didi Credit`** account as a
+> placeholder — tune the sender/wording against real messages on-device, and if
+> DiDi *balance* needs a distinct account, seed it in the backend first (an
+> unseeded account name is a 422).
 
 ## Build configuration (required)
 
@@ -49,9 +83,20 @@ Then build/install:
 ./gradlew :app:installDebug        # sideload to the connected S25
 ```
 
+After install, grant the **SMS** runtime permissions so ADR-0013 capture works
+(the notification-listener access grant is separate, as before):
+
+```sh
+adb shell pm grant com.daohoangson.n8n.notificationlistener android.permission.RECEIVE_SMS
+adb shell pm grant com.daohoangson.n8n.notificationlistener android.permission.READ_SMS
+```
+
 ## Tuning the parsers
 
-`fcc/IngestConfig.kt` ships **starting-point** regexes for BBVA and Amex. Real
-notification wording varies; refine `amountRegex` / `currencyRegex` / `dropRegex`
-against captures you actually see, and re-run `IngestTransformTest` (add a case
-per new wording). A notification with no parseable amount is dropped, not sent.
+`fcc/IngestConfig.kt` ships **starting-point** regexes for the notification
+`rules` (BBVA, Amex, and the batch-1 banks) and for the SMS `smsRules` (DiDi).
+Real notification/SMS wording varies; refine `amountRegex` / `currencyRegex` /
+`dropRegex` (and, for SMS, `senderRegex`) against captures you actually see, and
+re-run `IngestTransformTest` (add a case per new wording). Anything with no
+parseable amount is dropped, not sent — and, from a tracked app/sender, recorded
+in `undecided_notifications` so you can spot wording the parser is missing.

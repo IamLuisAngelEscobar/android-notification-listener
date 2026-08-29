@@ -23,4 +23,11 @@ interface UndecidedNotificationDao {
     
     @Query("SELECT * FROM undecided_notifications ORDER BY timestamp DESC")
     fun getAllUndecidedNotificationsFlow(): Flow<List<UndecidedNotification>>
+
+    /** Keep only the [keep] most recent rows so the table stays bounded (#70). */
+    @Query(
+        "DELETE FROM undecided_notifications WHERE id NOT IN " +
+            "(SELECT id FROM undecided_notifications ORDER BY id DESC LIMIT :keep)"
+    )
+    suspend fun trimToMostRecent(keep: Int)
 }

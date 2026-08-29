@@ -24,5 +24,8 @@ class NotificationListenerApplication : Application(), Configuration.Provider {
         super.onCreate()
         // Safety net: drain anything left buffered even without a fresh capture.
         IngestScheduler.ensurePeriodicDrain(this)
+        // ADR-0013: re-read the SMS inbox periodically for anything the live
+        // broadcast missed (needs READ_SMS; a no-op until that's granted).
+        IngestScheduler.ensurePeriodicSmsSweep(this)
     }
 }

@@ -33,6 +33,26 @@ data class AccountRule(
     val dropRegex: Regex? = null,
 )
 
+/**
+ * How one SMS sender's message becomes an `/ingest` row (ADR-0013). Mirrors
+ * [AccountRule] but is keyed by the **sender**, because an SMS has no app
+ * package: DiDi balance / cashloan spends arrive only by SMS, so the
+ * notification listener never sees them.
+ *
+ * `senderRegex` matches the SMS originating address — a shortcode or an
+ * alphanumeric sender id like `DiDi`. `account` must match a **seeded account
+ * name** exactly or the server answers 422. `amountRegex` / `currencyRegex` /
+ * `dropRegex` behave exactly as on [AccountRule].
+ */
+data class SmsRule(
+    val senderRegex: Regex,
+    val account: String,
+    val defaultCurrency: String,
+    val amountRegex: Regex,
+    val currencyRegex: Regex? = null,
+    val dropRegex: Regex? = null,
+)
+
 object IngestConfig {
     // A charge line such as "$1,234.56", "MXN 250.00", "US$45.30". Group 1 is the
     // bare number (thousands separators allowed); IngestTransform normalizes it.
@@ -107,4 +127,31 @@ object IngestConfig {
 
     fun ruleFor(packageName: String): AccountRule? =
         rules.firstOrNull { it.packageName == packageName }
+
+    /**
+     * SMS-sourced rules (ADR-0013, issue #68). **STARTING POINT** — the DiDi
+     * sender id and the exact wording must be tuned on-device against real
+     * messages (grant the app SMS access, watch what actually arrives), exactly
+     * like the notification rules above.
+     *
+     * ⚠️ `account` must be a **seeded** account name, or `/ingest` 422s. "Didi
+     * Credit" is reused from the notification rule as a placeholder; if DiDi
+     * *balance* (the wallet, not the cashloan line) should map to a distinct
+     * account, seed that account in the backend first and add a second rule.
+     */
+    val smsRules: List<SmsRule> = listOf(
+        SmsRule(
+            // DiDi delivers balance/cashloan alerts by SMS; the sender id contains
+            // "DiDi". Refine to the real shortcode once observed on-device.
+            senderRegex = """(?i)didi""".toRegex(),
+            account = "Didi Credit",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
+    )
+
+    fun smsRuleFor(sender: String): SmsRule? =
+        smsRules.firstOrNull { it.senderRegex.containsMatchIn(sender) }
 }
