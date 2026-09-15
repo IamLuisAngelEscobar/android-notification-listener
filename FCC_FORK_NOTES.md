@@ -60,6 +60,31 @@ the backend.
 > DiDi *balance* needs a distinct account, seed it in the backend first (an
 > unseeded account name is a 422).
 
+## 9 PM daily-summary trigger (#80, ADR-0016 in the main repo)
+
+The backend's `POST /whatsapp/send-summary?date=…` is passive: the phone owns the
+clock. This app fires it at 9 PM phone-local, replacing the Tasker job the main
+repo's ADR-0011 originally named.
+
+- `fcc/SummarySchedule.kt` (pure, unit-tested):
+  - computes the next 21:00 in the phone's zone, stable across DST;
+  - derives the send-summary URL from `fcc.ingest.url` (`…/ingest` →
+    `…/whatsapp/send-summary`), so there's **no new `local.properties` key**;
+  - maps HTTP codes to send / retry / give up.
+- `work/SummaryAlarm.kt` arms an exact alarm (`setExactAndAllowWhileIdle`). When it
+  fires, `SummaryAlarmReceiver` queues a unique-per-date
+  `work/SummaryTriggerWorker` (network-constrained, exponential backoff, gives up
+  after 8 attempts ≈ 2h) and re-arms tomorrow's alarm.
+- `SummaryRearmReceiver` re-arms after boot, a time-zone or clock change, and an
+  app update. The app also re-arms on every start.
+- Permissions: `USE_EXACT_ALARM` (granted at install for this sideloaded app) and
+  `RECEIVE_BOOT_COMPLETED`.
+- After installing, **open the app once** so the alarm is armed, and set its
+  battery usage to **Unrestricted**.
+- Logcat tags: `FccSummaryAlarm` (armed for …) and `FccSummaryTrigger` (summary
+  sent / retry / giving up).
+- For a missed night, message the bot `summary` or `summary YYYY-MM-DD`.
+
 ## Build configuration (required)
 
 The Tailscale endpoint and shared secret are injected from `local.properties`
