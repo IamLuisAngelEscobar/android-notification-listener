@@ -8,6 +8,10 @@
          for the periodic inbox sweep that backstops a missed broadcast. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- #80: the 9 PM daily-summary trigger. An exact alarm (USE_EXACT_ALARM is
+         granted at install for this sideloaded app), re-armed after a reboot. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".NotificationListenerApplication"
@@ -53,6 +57,24 @@
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- #80: the 9 PM daily-summary alarm, and the re-arm after a reboot, a
+             time-zone or clock change, or an app update. The alarm receiver is
+             private; the re-arm receiver only acts on those four system actions. -->
+        <receiver
+            android:name=".SummaryAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".SummaryRearmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

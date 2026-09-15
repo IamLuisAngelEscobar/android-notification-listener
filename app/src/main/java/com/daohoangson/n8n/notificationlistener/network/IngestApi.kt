@@ -19,4 +19,14 @@ interface IngestApi {
         @Header("X-Ingest-Secret") secret: String,
         @Body body: RequestBody,
     ): Response<Unit>
+
+    /**
+     * The passive daily-summary push (#80). The phone's local date travels in the
+     * URL's query string; the backend sends the summary through its channel.
+     */
+    @POST
+    suspend fun sendSummary(
+        @Url url: String,
+        @Header("X-Ingest-Secret") secret: String,
+    ): Response<Unit>
 }
