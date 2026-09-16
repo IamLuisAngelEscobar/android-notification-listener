@@ -131,21 +131,22 @@ class IngestTransformTest {
     }
 
     @Test
-    fun google_wallet_tap_maps_to_account() {
-        // ADR-0013 Track A: Wallet posts "You paid $X at Y with <card>" on a
-        // tap-to-pay; it maps to the seeded "Google Wallet" account (not the card).
-        val p = ingestable(
+    fun google_wallet_taps_are_not_captured() {
+        // financial-command-center#65: Wallet capture was removed. It posted the
+        // terminal's currency behind a bare "$" (USD abroad, stored as MXN — a
+        // $31.64 tap became 31.64 MXN), while the card's own bank app already
+        // captured the same purchase correctly. Untracked now, so it is not even
+        // recorded as a tracked-source drop.
+        val d = dropped(
             IngestTransform.transform(
                 notif(
                     "com.google.android.apps.walletnfcrel",
-                    text = "You paid \$85.00 at STARBUCKS with Amex ••1009",
+                    text = "CULVERS CHICAGO WRIGLEYV \$31.64 with Like U ••0780",
                 ),
                 zone = mexicoCity,
             )
         )
-        assertEquals("Google Wallet", p.account)
-        assertEquals(85.0, p.amount, 0.0001)
-        assertEquals("MXN", p.currency)
+        assertTrue("Wallet is untracked and must not flood undecided", !d.fromTrackedSource)
     }
 
     @Test

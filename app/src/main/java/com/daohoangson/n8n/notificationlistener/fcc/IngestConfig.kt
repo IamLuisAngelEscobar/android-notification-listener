@@ -126,24 +126,20 @@ object IngestConfig {
             currencyRegex = CURRENCY,
             dropRegex = NOISE,
         ),
-        // ── Google Wallet tap-to-pay (ADR-0013, Track A) ───────────────────────
-        // Wallet posts "You paid $X at Y with <card>" on every tap-to-pay, so it
-        // captures like any other notification source — no new permission (it
-        // rides the existing Notification Access grant). Its own seeded account
-        // rather than the underlying card: a Wallet tap and the card's own bank
-        // push are the same purchase, so a distinct account keeps provenance
-        // honest and lets backend reconciliation (financial-command-center#69)
-        // merge them. The "Google Wallet" account is seeded backend-side
-        // (financial-command-center#73). Amount/noise regexes are the generic MXN
-        // defaults — tune against real Wallet wording on-device.
-        AccountRule(
-            packageName = "com.google.android.apps.walletnfcrel",
-            account = "Google Wallet",
-            defaultCurrency = "MXN",
-            amountRegex = MONEY,
-            currencyRegex = CURRENCY,
-            dropRegex = NOISE,
-        ),
+        // ── Google Wallet tap-to-pay: REMOVED (financial-command-center#65) ────
+        // ADR-0013 Track A captured Wallet alongside the underlying card and left
+        // the duplicate to backend reconciliation (#69). Real captures showed that
+        // costs more than it gives:
+        //   * Wallet posts the amount in the TERMINAL's currency behind a bare
+        //     "$" — abroad that is USD, but this rule defaulted to MXN, so a
+        //     $31.64 tap was stored as 31.64 MXN, ~1/17th of the real spend;
+        //   * the card's own bank app had already captured the same purchase
+        //     correctly in MXN (6 of 9 Wallet rows matched a Santander row
+        //     minute-for-minute at the USD→MXN rate).
+        // The bank notification is the single source of truth, so the duplicate
+        // never exists rather than being reconciled away. A tap on a card whose
+        // bank app isn't tracked is now missed — a reason to add that bank's rule,
+        // not to re-add Wallet.
     )
 
     fun ruleFor(packageName: String): AccountRule? =

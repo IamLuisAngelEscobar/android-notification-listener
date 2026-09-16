@@ -53,6 +53,15 @@ the backend.
   insert / route-to-Inbox logic lives at `/ingest`, not here. This fork only
   emits the `source.app` provenance that logic relies on — no change needed for
   reconciliation itself.
+- **Google Wallet capture was REMOVED** (financial-command-center#65). ADR-0013
+  Track A captured Wallet *and* the underlying card, leaving the duplicate to
+  backend reconciliation. Real captures showed two problems: Wallet posts the
+  **terminal's** currency behind a bare `$` (USD abroad) while the rule defaulted
+  to MXN — a `$31.64` tap was stored as `31.64 MXN` — and 6 of 9 Wallet rows
+  already had a correct MXN row from the card's own bank app, minute-for-minute
+  at the USD→MXN rate. The bank notification is now the single source of truth. A
+  tap on a card whose bank app isn't tracked is missed; add that bank's rule
+  rather than re-adding Wallet.
 
 > ⚠️ **SMS rules are a starting point.** `IngestConfig.smsRules` matches the DiDi
 > sender by `(?i)didi` and maps to the seeded **`Didi Credit`** account as a
