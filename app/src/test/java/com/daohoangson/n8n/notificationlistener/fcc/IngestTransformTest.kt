@@ -182,6 +182,55 @@ class IngestTransformTest {
         assertTrue("expected a positive magnitude", p.amount > 0)
     }
 
+    // ── Amount at the end of a sentence (real wording; 18 captures were lost) ──
+    // The capture app's own skip log showed these dropped as "no parseable
+    // amount" even though the amount is right there: the magnitude group also
+    // swallowed the full stop, and "132.57." is not a number.
+
+    @Test
+    fun openbank_purchase_with_trailing_period_parses() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif(
+                    "mx.openbank.modelbank",
+                    title = "Compra exitosa ✅",
+                    text = "Hiciste una compra en AMAZON MKTPLACE PMTS con tu tarjeta terminación ****4044 por \$132.57. Si no la reconoces, llámanos a la Línea Open.",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Openbank Credit", p.account)
+        assertEquals(132.57, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
+    @Test
+    fun bbva_charge_notice_with_trailing_period_parses() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif(
+                    "com.bancomer.mbanking",
+                    title = "Aviso de cargo en tu cuenta",
+                    text = "Tienes un cargo a tu cuenta *3960 de \$14,694.75. Esta información te ayuda a tener control en tus finanzas.",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("BBVA Debit", p.account)
+        assertEquals(14694.75, p.amount, 0.0001)
+    }
+
+    @Test
+    fun amount_followed_by_a_comma_parses() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("com.bancomer.mbanking", text = "Cargo por \$1,234.56, consulta tu app"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals(1234.56, p.amount, 0.0001)
+    }
+
     @Test
     fun untracked_app_is_dropped() {
         val result = IngestTransform.transform(notif("com.slack", text = "You have a new message"), zone = mexicoCity)

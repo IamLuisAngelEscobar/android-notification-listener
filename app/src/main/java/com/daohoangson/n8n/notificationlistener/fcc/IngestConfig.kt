@@ -56,7 +56,10 @@ data class SmsRule(
 object IngestConfig {
     // A charge line such as "$1,234.56", "MXN 250.00", "US$45.30". Group 1 is the
     // bare number (thousands separators allowed); IngestTransform normalizes it.
-    private val MONEY = """(?:MXN|USD|US\$|\$)\s?([0-9][0-9.,]*)""".toRegex(RegexOption.IGNORE_CASE)
+    // The group must END on a digit: banks routinely close the sentence right
+    // after the amount ("… por $132.57."), and a swallowed full stop made the
+    // magnitude unparseable, silently dropping real captures.
+    private val MONEY = """(?:MXN|USD|US\$|\$)\s?([0-9](?:[0-9.,]*[0-9])?)""".toRegex(RegexOption.IGNORE_CASE)
 
     // Text that signals "not a spend" even though it came from a bank app.
     private val NOISE =
