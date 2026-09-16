@@ -183,6 +183,94 @@ class IngestTransformTest {
         assertTrue("expected a positive magnitude", p.amount > 0)
     }
 
+    // ── Promotional noise that carries an amount (financial-command-center#66) ─
+    // These reached the Inbox as ledger rows because they quote a figure. They are
+    // offers and reminders, not money moving. The rules key on the *promotional
+    // framing*, never on a product name: "Efectivo Inmediato" is also a real BBVA
+    // cash advance, and dropping that would hide a genuine debt.
+
+    @Test
+    fun bbva_credit_line_offer_is_dropped() {
+        val d = dropped(
+            IngestTransform.transform(
+                notif(
+                    "com.bancomer.mbanking",
+                    title = "Usa \$16,500 de tu TDC ¡sin comisión!🤑",
+                    text = "Luis Angel, con Efectivo Inmediato retira el dinero de tu TDC *5364 a tu cuenta.",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("noise filter matched", d.reason)
+    }
+
+    @Test
+    fun bbva_credit_limit_increase_offer_is_dropped() {
+        val d = dropped(
+            IngestTransform.transform(
+                notif(
+                    "com.bancomer.mbanking",
+                    title = "🚀 Tu incremento ya te espera",
+                    text = "Aumenta hasta \$17,200 más a tu TDC *5364. Hazlo desde tu app BBVA.",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("noise filter matched", d.reason)
+    }
+
+    @Test
+    fun didi_deposit_promo_is_dropped() {
+        val d = dropped(
+            IngestTransform.transform(
+                notif(
+                    "com.didiglobal.cashloan",
+                    title = "DiDi Cuenta：[NO LEÍDO] Haz tu primer depósito",
+                    text = "Hola Luis. Habilitamos en tu cuenta una tasa de hasta el 15% anual. Deposita \$200 m.n. ahora.",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("noise filter matched", d.reason)
+    }
+
+    @Test
+    fun mercado_pago_bill_reminder_is_dropped() {
+        val d = dropped(
+            IngestTransform.transform(
+                notif(
+                    "com.mercadopago.wallet",
+                    title = "Tienes un recibo que vence hoy",
+                    text = "Paga ahora \$ 428.88 a Telcel - Pospago.",
+                ),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("noise filter matched", d.reason)
+    }
+
+    // Look-alikes that MUST survive the new rules: real money, real wording.
+
+    @Test
+    fun real_spends_and_transfers_survive_the_noise_rules() {
+        val survivors = listOf(
+            "mx.openbank.modelbank" to ("Compra exitosa ✅" to "Hiciste una compra en AMAZON MKTPLACE PMTS con tu tarjeta terminación ****4044 por \$220.00."),
+            "com.bancomer.mbanking" to ("Aviso de cargo en tu cuenta" to "Tienes un cargo a tu cuenta *3960 de \$4,800.00. Esta información te ayuda a tener control."),
+            "com.bancomer.mbanking" to ("Cargo a tu cuenta" to "Cargo a tu cuenta *3960 de \$200.00"),
+            "com.bancomer.mbanking" to ("BBVA" to "Abono a tu cuenta *33960 de \$100.00"),
+            // Own-account movements: not income, but they must still reach the Inbox.
+            "com.mercadopago.wallet" to ("Tu dinero ya está disponible" to "Ingresaste \$ 200.00 desde tu cuenta de BBVA MEXICO."),
+            "mx.openbank.modelbank" to ("Recibiste una transferencia ✅" to "Recibiste \$ 100.00 en tu cuenta ****5543."),
+            // Cashback stays capturable: the owner resolves it in the Inbox (#66).
+            "com.didiglobal.cashloan" to ("Cashback de DiDi Card recibido: MXN\$14.68" to "Puedes agregarlo a tu DiDi Monedero."),
+        )
+        for ((pkg, texts) in survivors) {
+            val (title, body) = texts
+            val result = IngestTransform.transform(notif(pkg, title = title, text = body), zone = mexicoCity)
+            assertTrue("must stay capturable: $title", result is TransformResult.Ingestable)
+        }
+    }
+
     // ── Amount at the end of a sentence (real wording; 18 captures were lost) ──
     // The capture app's own skip log showed these dropped as "no parseable
     // amount" even though the amount is right there: the magnitude group also

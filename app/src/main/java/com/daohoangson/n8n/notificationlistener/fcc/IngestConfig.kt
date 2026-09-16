@@ -62,8 +62,29 @@ object IngestConfig {
     private val MONEY = """(?:MXN|USD|US\$|\$)\s?([0-9](?:[0-9.,]*[0-9])?)""".toRegex(RegexOption.IGNORE_CASE)
 
     // Text that signals "not a spend" even though it came from a bank app.
-    private val NOISE =
-        """(?i)\b(c[oó]digo|otp|verificaci[oó]n|saldo disponible|promoci[oó]n|beneficio|estado de cuenta)\b""".toRegex()
+    //
+    // Two groups (financial-command-center#66):
+    //  1. the original OTP / statement / balance pings;
+    //  2. promotional offers and bill reminders that QUOTE an amount — those
+    //     parsed fine and became Inbox rows ("Usa $16,500 de tu TDC",
+    //     "Aumenta hasta $17,200 más a tu TDC", "Haz tu primer depósito …
+    //     Deposita $200", "Tienes un recibo que vence … Paga ahora $428.88").
+    //
+    // Keyed on the promotional FRAMING, never on a product name: "Efectivo
+    // Inmediato" is also a real BBVA cash advance, and a rule on that name would
+    // hide a genuine debt. Every alternative below is phrasing an offer uses and a
+    // real charge/deposit notification does not; the survivors are pinned by
+    // `real_spends_and_transfers_survive_the_noise_rules`.
+    private val NOISE = (
+        """(?i)(\b(c[oó]digo|otp|verificaci[oó]n|saldo disponible|promoci[oó]n|beneficio|estado de cuenta)\b""" +
+            // Credit-line and cash-advance offers.
+            """|\busa\s+\$?[\d,.]+\s+de\s+tu\b|\bretira\s+(?:hasta\s+)?\$?[\d,.]*\s*de\s+tu\b""" +
+            """|\baumenta\s+hasta\b|\btu\s+incremento\b|\bsin\s+comisi[oó]n\b""" +
+            // Savings / deposit promos.
+            """|\bhaz\s+tu\s+primer\s+dep[oó]sito\b|\btasa\s+de\s+hasta\b""" +
+            // Bill reminders: a due notice, not a payment that already happened.
+            """|\brecibo\s+que\s+vence\b|\bpaga\s+ahora\b|\bprogramar\s+o\s+hacer\s+tu\s+pago\b)"""
+        ).toRegex()
 
     // Which currency a line is denominated in, when it isn't the account default.
     private val CURRENCY = """(USD|US\$|MXN)""".toRegex(RegexOption.IGNORE_CASE)
