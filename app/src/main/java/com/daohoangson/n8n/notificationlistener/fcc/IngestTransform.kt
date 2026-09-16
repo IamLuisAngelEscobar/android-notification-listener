@@ -177,7 +177,10 @@ object IngestTransform {
 
     /** Extract the magnitude (group 1), stripping thousands separators. */
     internal fun parseAmount(text: String, regex: Regex): BigDecimal? {
-        val raw = regex.find(text)?.groupValues?.getOrNull(1)?.trim() ?: return null
+        // trimEnd is belt-and-braces next to the anchored MONEY group: a custom
+        // rule regex may still hand back a trailing separator, and "132.57." is
+        // not a number — which is how 18 real captures were lost.
+        val raw = regex.find(text)?.groupValues?.getOrNull(1)?.trim()?.trimEnd('.', ',') ?: return null
         // Locale here is MXN/USD: `,` is a thousands separator, `.` the decimal.
         val normalized = raw.replace(",", "")
         return normalized.toBigDecimalOrNull()?.takeIf { it.signum() != 0 }
