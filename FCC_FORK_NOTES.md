@@ -69,6 +69,28 @@ the backend.
 > DiDi *balance* needs a distinct account, seed it in the backend first (an
 > unseeded account name is a 422).
 
+## Choosing apps on-device
+
+The app's home screen lists every installed launcher app with a listen switch,
+built with the **Listener Design System** (claude.ai/design; tokens, Geist/Geist
+Mono and the Apps-screen layout ported to Compose under `ui/theme`,
+`ui/components`, `ui/apps`).
+
+- Choices live in the `listened_apps` Room table (DB v4, explicit 3→4
+  migration so the upgrade never falls through to the destructive fallback and
+  wipes `pending_captures`).
+- `IngestConfig.effectiveRules(choices)` overlays them on the built-in `rules`:
+  a built-in with no row keeps its shipped behaviour; a row can switch it off or
+  change its account/currency (its regexes stay); any other enabled app gets
+  `IngestConfig.genericRule` (the generic MXN/USD amount + noise regexes).
+- Switching on an app with no account asks for one. It must be a **seeded
+  account name** or `/ingest` 422s, same as a built-in rule. Switching off keeps
+  the row (disabled) so the account is remembered.
+- The listener reads the effective rules on every capture, so a change applies
+  to the next notification. SMS rules are unchanged (still `smsRules`).
+- A bank that needs its own wording should still be promoted to a built-in rule
+  with tuned regexes and an `IngestTransformTest` case.
+
 ## 9 PM daily-summary trigger (#80, ADR-0016 in the main repo)
 
 The backend's `POST /whatsapp/send-summary?date=…` is passive: the phone owns the

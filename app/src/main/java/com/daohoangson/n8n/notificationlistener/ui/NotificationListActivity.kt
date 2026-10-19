@@ -39,7 +39,7 @@ import com.daohoangson.n8n.notificationlistener.config.DefaultWebhookConfig
 import com.daohoangson.n8n.notificationlistener.data.database.FailedNotification
 import com.daohoangson.n8n.notificationlistener.data.database.UndecidedNotification
 import com.daohoangson.n8n.notificationlistener.data.repository.NotificationRepository
-import com.daohoangson.n8n.notificationlistener.ui.theme.MyApplicationTheme
+import com.daohoangson.n8n.notificationlistener.ui.theme.ListenerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -54,7 +54,7 @@ class NotificationListActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         setContent {
-            MyApplicationTheme {
+            ListenerTheme {
                 NotificationListScreen(repository)
             }
         }

@@ -5,6 +5,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCapture
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCaptureDao
+import com.daohoangson.n8n.notificationlistener.data.repository.ListenedAppRepository
 import com.daohoangson.n8n.notificationlistener.data.repository.NotificationRepository
 import com.daohoangson.n8n.notificationlistener.fcc.IngestTransform
 import com.daohoangson.n8n.notificationlistener.fcc.TransformResult
@@ -38,6 +39,9 @@ class NotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var repository: NotificationRepository
 
+    @Inject
+    lateinit var listenedApps: ListenedAppRepository
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
 
@@ -54,7 +58,7 @@ class NotificationListenerService : NotificationListenerService() {
     }
 
     private suspend fun processNotification(data: NotificationData) {
-        when (val result = IngestTransform.transform(data)) {
+        when (val result = IngestTransform.transform(data, rules = listenedApps.activeRules())) {
             is TransformResult.Dropped -> {
                 if (result.fromTrackedSource) {
                     // A tracked financial app we still couldn't parse (noise / no

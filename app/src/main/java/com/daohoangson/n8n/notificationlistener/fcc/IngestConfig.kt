@@ -1,5 +1,7 @@
 package com.daohoangson.n8n.notificationlistener.fcc
 
+import com.daohoangson.n8n.notificationlistener.data.database.ListenedApp
+
 /**
  * Endpoint + secret for the private API, injected from `local.properties` at
  * build time (see app/build.gradle.kts → BuildConfig). Kept out of version
@@ -178,6 +180,44 @@ object IngestConfig {
 
     fun ruleFor(packageName: String): AccountRule? =
         rules.firstOrNull { it.packageName == packageName }
+
+    /**
+     * A rule for an app the owner picked on-device: the generic MXN/USD amount
+     * and noise regexes every built-in rule starts from. Tune a specific bank by
+     * promoting it to a built-in rule above.
+     */
+    fun genericRule(packageName: String, account: String, defaultCurrency: String): AccountRule =
+        AccountRule(
+            packageName = packageName,
+            account = account,
+            defaultCurrency = defaultCurrency,
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        )
+
+    /**
+     * The rules the listener actually applies: [rules] overlaid with the owner's
+     * on-device [choices] (the `listened_apps` table).
+     *
+     *  - a built-in with no choice keeps its shipped behaviour (listened);
+     *  - a built-in with a choice keeps its regexes but takes the choice's switch,
+     *    account and currency;
+     *  - any other enabled choice becomes a [genericRule].
+     */
+    fun effectiveRules(choices: List<ListenedApp>): List<AccountRule> {
+        val byPackage = choices.associateBy { it.packageName }
+        val builtIns = rules.mapNotNull { rule ->
+            val choice = byPackage[rule.packageName] ?: return@mapNotNull rule
+            if (!choice.enabled) return@mapNotNull null
+            rule.copy(account = choice.account, defaultCurrency = choice.defaultCurrency)
+        }
+        val builtInPackages = rules.map { it.packageName }.toSet()
+        val added = choices
+            .filter { it.enabled && it.packageName !in builtInPackages }
+            .map { genericRule(it.packageName, it.account, it.defaultCurrency) }
+        return builtIns + added
+    }
 
     /**
      * SMS-sourced rules (ADR-0013, issue #68). **STARTING POINT** — the DiDi
