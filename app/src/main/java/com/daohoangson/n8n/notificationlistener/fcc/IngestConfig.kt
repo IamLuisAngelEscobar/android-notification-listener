@@ -147,6 +147,19 @@ object IngestConfig {
             currencyRegex = CURRENCY,
             dropRegex = NOISE,
         ),
+        AccountRule(
+            // Klar → seeded "Klar Credit" (financial-command-center#150). Package
+            // confirmed on the S25 (2026-10-19). One app serves both the Klar
+            // savings account and the card; the owner only spends on the card, so
+            // every captured charge maps to the card. If the debit card is ever
+            // used, this rule needs wording that tells the two apart.
+            packageName = "mx.klar.app",
+            account = "Klar Credit",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            currencyRegex = CURRENCY,
+            dropRegex = NOISE,
+        ),
         // ── Google Wallet tap-to-pay: REMOVED (financial-command-center#65) ────
         // ADR-0013 Track A captured Wallet alongside the underlying card and left
         // the duplicate to backend reconciliation (#69). Real captures showed that
