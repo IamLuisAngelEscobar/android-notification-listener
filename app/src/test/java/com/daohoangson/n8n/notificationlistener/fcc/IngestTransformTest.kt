@@ -131,6 +131,19 @@ class IngestTransformTest {
     }
 
     @Test
+    fun klar_credit_charge_maps_to_credit_account() {
+        val p = ingestable(
+            IngestTransform.transform(
+                notif("mx.klar.app", text = "Compra por \$345.00 en OXXO con tu tarjeta de crédito Klar"),
+                zone = mexicoCity,
+            )
+        )
+        assertEquals("Klar Credit", p.account)
+        assertEquals(345.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+    }
+
+    @Test
     fun google_wallet_taps_are_not_captured() {
         // financial-command-center#65: Wallet capture was removed. It posted the
         // terminal's currency behind a bare "$" (USD abroad, stored as MXN — a
