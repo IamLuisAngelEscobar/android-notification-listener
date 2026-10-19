@@ -4,6 +4,7 @@ import android.content.Context
 import com.daohoangson.n8n.notificationlistener.BuildConfig
 import com.daohoangson.n8n.notificationlistener.data.database.AppDatabase
 import com.daohoangson.n8n.notificationlistener.data.database.FailedNotificationDao
+import com.daohoangson.n8n.notificationlistener.data.database.ListenedAppDao
 import com.daohoangson.n8n.notificationlistener.data.database.PendingCaptureDao
 import com.daohoangson.n8n.notificationlistener.data.database.UndecidedNotificationDao
 import com.daohoangson.n8n.notificationlistener.data.repository.NotificationRepository
@@ -36,6 +37,11 @@ object AppModule {
     @Provides
     fun provideUndecidedNotificationDao(database: AppDatabase): UndecidedNotificationDao {
         return database.undecidedNotificationDao()
+    }
+
+    @Provides
+    fun provideListenedAppDao(database: AppDatabase): ListenedAppDao {
+        return database.listenedAppDao()
     }
 
     @Provides

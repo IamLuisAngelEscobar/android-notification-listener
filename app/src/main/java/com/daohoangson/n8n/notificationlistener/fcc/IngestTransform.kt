@@ -42,11 +42,16 @@ object IngestTransform {
 
     private val ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
+    /**
+     * [rules] defaults to the built-ins; the listener passes
+     * [IngestConfig.effectiveRules] so the owner's on-device app choices apply.
+     */
     fun transform(
         data: NotificationData,
         zone: ZoneId = ZoneId.systemDefault(),
+        rules: List<AccountRule> = IngestConfig.rules,
     ): TransformResult {
-        val rule = IngestConfig.ruleFor(data.packageName)
+        val rule = rules.firstOrNull { it.packageName == data.packageName }
             ?: return TransformResult.Dropped(
                 "not a tracked financial app: ${data.packageName}",
                 fromTrackedSource = false,
