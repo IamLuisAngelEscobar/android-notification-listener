@@ -53,15 +53,19 @@ the backend.
   insert / route-to-Inbox logic lives at `/ingest`, not here. This fork only
   emits the `source.app` provenance that logic relies on — no change needed for
   reconciliation itself.
-- **Google Wallet capture was REMOVED** (financial-command-center#65). ADR-0013
-  Track A captured Wallet *and* the underlying card, leaving the duplicate to
-  backend reconciliation. Real captures showed two problems: Wallet posts the
-  **terminal's** currency behind a bare `$` (USD abroad) while the rule defaulted
-  to MXN — a `$31.64` tap was stored as `31.64 MXN` — and 6 of 9 Wallet rows
-  already had a correct MXN row from the card's own bank app, minute-for-minute
-  at the USD→MXN rate. The bank notification is now the single source of truth. A
-  tap on a card whose bank app isn't tracked is missed; add that bank's rule
-  rather than re-adding Wallet.
+- **Google Wallet is captured per card** (financial-command-center ADR-0033).
+  It was removed in #65: the card's own bank app already captured each tap, and
+  a bare `$` was read as MXN (a US `$31.64` tap stored as `31.64 MXN`). It came
+  back when Santander stopped pushing purchase notifications (2026-11-01).
+  Wallet posts `<merchant>` / `MX$500.00 with DIDI Credit Card ••5731`, so:
+  - **the card picks the account** (`AccountRule.cards`): `••0780` (Like U) →
+    `Santander Credit`; `••5731` (DiDi) → `null`, skipped quietly because DiDi
+    already arrives by SMS; any other card lands in **Undecided** until mapped;
+  - **the symbol picks the currency** (`currencyFromSymbol`), read through the
+    phone's language: on an English phone `MX$` is MXN and a bare `$` is USD.
+    A symbol that isn't exactly one of MXN/USD lands in Undecided.
+  If Santander's own push comes back, map `0780` to `null`, or each purchase is
+  captured twice.
 
 > ⚠️ **SMS rules are a starting point.** `IngestConfig.smsRules` matches the DiDi
 > sender by `(?i)didi` and maps to the seeded **`Didi Credit`** account as a
