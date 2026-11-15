@@ -6,6 +6,8 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Currency
+import java.util.Locale
 
 /** Outcome of turning one notification into an `/ingest` row. */
 sealed interface TransformResult {
@@ -50,6 +52,7 @@ object IngestTransform {
         data: NotificationData,
         zone: ZoneId = ZoneId.systemDefault(),
         rules: List<AccountRule> = IngestConfig.rules,
+        locale: Locale = Locale.getDefault(),
     ): TransformResult {
         val rule = rules.firstOrNull { it.packageName == data.packageName }
             ?: return TransformResult.Dropped(
@@ -66,11 +69,28 @@ object IngestTransform {
             }
         }
 
+        val account = rule.cards?.let { cards ->
+            val card = CARD_SUFFIX.find(haystack)?.groupValues?.get(1)
+                ?: return TransformResult.Dropped("no card number in: $haystack")
+            if (card !in cards) {
+                return TransformResult.Dropped("card ••$card is not mapped to an account")
+            }
+            cards[card] ?: return TransformResult.Dropped(
+                "card ••$card is captured from another source",
+                fromTrackedSource = false,
+            )
+        } ?: rule.account
+
         val amount = parseAmount(haystack, rule.amountRegex)
             ?: return TransformResult.Dropped("no parseable amount in: $haystack")
         if (amount.signum() == 0) return TransformResult.Dropped("amount is zero")
 
-        val currency = parseCurrency(haystack, rule)
+        val currency = if (rule.currencyFromSymbol) {
+            currencyFromSymbol(haystack, locale)
+                ?: return TransformResult.Dropped("currency symbol is unclear in: $haystack")
+        } else {
+            parseCurrency(haystack, rule)
+        }
 
         val occurredAt = Instant.ofEpochMilli(data.timestamp)
             .atZone(zone)
@@ -81,7 +101,7 @@ object IngestTransform {
         val reference = deriveReference(data, amount, currency)
 
         val payload = IngestPayload(
-            account = rule.account,
+            account = account,
             amount = amount.toDouble(),
             currency = currency,
             description = haystack,
@@ -178,6 +198,28 @@ object IngestTransform {
         ).joinToString("|")
         val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray())
         return "sms-" + digest.joinToString("") { "%02x".format(it) }.take(32)
+    }
+
+    // "••0780", "•• 0780", "··0780": the card a Wallet tap was made with.
+    private val CARD_SUFFIX = """[•·]+\s?(\d{4})\b""".toRegex()
+
+    // The symbol written straight before an amount: "MX$", "$", "US$", "€".
+    private val CURRENCY_SYMBOL = """(\S*?[$€£¥])\s?[0-9]""".toRegex()
+
+    // What the ledger converts from Wallet today; anything else goes to Undecided.
+    private val SYMBOL_CURRENCIES = listOf("MXN", "USD")
+
+    /**
+     * The currency whose symbol, in the phone's [locale], is the one printed before
+     * the amount — or null when it names none or more than one. Wallet formats with
+     * the device language, so "$" is USD on an English phone and MXN on a Mexican
+     * Spanish one; reading it through the same locale gets both right.
+     */
+    internal fun currencyFromSymbol(text: String, locale: Locale): String? {
+        val symbol = CURRENCY_SYMBOL.find(text)?.groupValues?.get(1) ?: return null
+        return SYMBOL_CURRENCIES
+            .filter { Currency.getInstance(it).getSymbol(locale) == symbol }
+            .singleOrNull()
     }
 
     /** Extract the magnitude (group 1), stripping thousands separators. */

@@ -33,6 +33,21 @@ data class AccountRule(
     val amountRegex: Regex,
     val currencyRegex: Regex? = null,
     val dropRegex: Regex? = null,
+    /**
+     * For an app that serves several cards (Google Wallet): the card's last four
+     * digits, as the notification prints them ("•• 0780"), → the seeded account.
+     * When set it decides the account and [account] is unused. A card mapped to
+     * `null` is captured from another source and is skipped quietly; a card not
+     * listed is left in Undecided rather than guessed.
+     */
+    val cards: Map<String, String?>? = null,
+    /**
+     * Read the currency from the symbol before the amount, as the phone's language
+     * prints it ("MX$" and "$" on an English phone), instead of [currencyRegex] and
+     * [defaultCurrency]. A symbol that doesn't name exactly one supported currency
+     * is left in Undecided.
+     */
+    val currencyFromSymbol: Boolean = false,
 )
 
 /**
@@ -162,20 +177,29 @@ object IngestConfig {
             currencyRegex = CURRENCY,
             dropRegex = NOISE,
         ),
-        // ── Google Wallet tap-to-pay: REMOVED (financial-command-center#65) ────
-        // ADR-0013 Track A captured Wallet alongside the underlying card and left
-        // the duplicate to backend reconciliation (#69). Real captures showed that
-        // costs more than it gives:
-        //   * Wallet posts the amount in the TERMINAL's currency behind a bare
-        //     "$" — abroad that is USD, but this rule defaulted to MXN, so a
-        //     $31.64 tap was stored as 31.64 MXN, ~1/17th of the real spend;
-        //   * the card's own bank app had already captured the same purchase
-        //     correctly in MXN (6 of 9 Wallet rows matched a Santander row
-        //     minute-for-minute at the USD→MXN rate).
-        // The bank notification is the single source of truth, so the duplicate
-        // never exists rather than being reconciled away. A tap on a card whose
-        // bank app isn't tracked is now missed — a reason to add that bank's rule,
-        // not to re-add Wallet.
+        // ── Google Wallet tap-to-pay, per card (financial-command-center ADR-0033) ─
+        // Removed in #65 because the card's own bank app already captured each
+        // tap, and because a bare "$" was read as MXN (a US $31.64 tap stored as
+        // 31.64 MXN). Back because Santander stopped pushing purchase
+        // notifications on 2026-11-01 while Wallet still posts one per tap:
+        //   "<merchant>" / "MX$500.00 with DIDI Credit Card ••5731"
+        // Each card is routed on its own; the currency comes from the symbol as
+        // the phone's language prints it ("MX$" vs "$" on an English phone).
+        // If Santander's own pushes come back, map 0780 to null to avoid
+        // capturing each purchase twice.
+        AccountRule(
+            packageName = "com.google.android.apps.walletnfcrel",
+            // Shown in the on-device picker; [cards] decides the real account.
+            account = "Santander Credit",
+            defaultCurrency = "MXN",
+            amountRegex = MONEY,
+            dropRegex = NOISE,
+            cards = mapOf(
+                "0780" to "Santander Credit", // Like U — Santander's push is silent
+                "5731" to null,               // DiDi card — already captured by SMS
+            ),
+            currencyFromSymbol = true,
+        ),
     )
 
     fun ruleFor(packageName: String): AccountRule? =

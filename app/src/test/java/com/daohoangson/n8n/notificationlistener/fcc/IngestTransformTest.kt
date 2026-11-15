@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.ZoneId
+import java.util.Locale
 
 class IngestTransformTest {
 
@@ -143,23 +144,73 @@ class IngestTransformTest {
         assertEquals("MXN", p.currency)
     }
 
-    @Test
-    fun google_wallet_taps_are_not_captured() {
-        // financial-command-center#65: Wallet capture was removed. It posted the
-        // terminal's currency behind a bare "$" (USD abroad, stored as MXN — a
-        // $31.64 tap became 31.64 MXN), while the card's own bank app already
-        // captured the same purchase correctly. Untracked now, so it is not even
-        // recorded as a tracked-source drop.
-        val d = dropped(
-            IngestTransform.transform(
-                notif(
-                    "com.google.android.apps.walletnfcrel",
-                    text = "CULVERS CHICAGO WRIGLEYV \$31.64 with Like U ••0780",
-                ),
-                zone = mexicoCity,
-            )
+    // ── Google Wallet (financial-command-center ADR-0033) ─────────────────────
+    // Santander stopped pushing purchase notifications on 2026-11-01; Wallet still
+    // posts one per tap, naming the card. Real wording (2026-11-15, English phone):
+    //   title "ESTACION SERV SAN JOSE", text "MX$500.00 with DIDI Credit Card ••5731"
+    // and abroad (Chicago, 2026-09): "$31.64 with Like U ••0780".
+
+    private val wallet = "com.google.android.apps.walletnfcrel"
+
+    private fun walletTap(merchant: String, text: String, locale: Locale = Locale.US) =
+        IngestTransform.transform(
+            notif(wallet, title = merchant, text = text),
+            zone = mexicoCity,
+            locale = locale,
         )
-        assertTrue("Wallet is untracked and must not flood undecided", !d.fromTrackedSource)
+
+    @Test
+    fun wallet_tap_on_the_santander_card_is_santander_credit() {
+        val p = ingestable(walletTap("OXXO ROMA NORTE", "MX\$249.00 with Like U ••0780"))
+        assertEquals("Santander Credit", p.account)
+        assertEquals(249.0, p.amount, 0.0001)
+        assertEquals("MXN", p.currency)
+        assertEquals("OXXO ROMA NORTE MX\$249.00 with Like U ••0780", p.source.raw_text)
+        assertEquals(wallet, p.source.app)
+    }
+
+    @Test
+    fun wallet_bare_dollar_on_an_english_phone_is_us_dollars() {
+        // The #65 bug: this tap was stored as 31.64 MXN. On an en-US phone Wallet
+        // writes pesos as "MX$", so a bare "$" is the US dollar.
+        val p = ingestable(walletTap("CULVERS CHICAGO WRIGLEYV", "\$31.64 with Like U ••0780"))
+        assertEquals(31.64, p.amount, 0.0001)
+        assertEquals("USD", p.currency)
+    }
+
+    @Test
+    fun wallet_symbols_follow_the_phone_language() {
+        // On a Spanish (Mexico) phone the same symbols mean the other thing.
+        val es = Locale.forLanguageTag("es-MX")
+        assertEquals("MXN", ingestable(walletTap("OXXO", "\$249.00 con Like U ••0780", es)).currency)
+    }
+
+    @Test
+    fun wallet_currency_it_cannot_name_is_left_for_review() {
+        val d = dropped(walletTap("CAFE", "€4.50 with Like U ••0780"))
+        assertTrue(d.fromTrackedSource)
+    }
+
+    @Test
+    fun wallet_tap_on_the_didi_card_is_ignored_quietly() {
+        // DiDi purchases already arrive by SMS (ADR-0013); capturing the Wallet copy
+        // too would put every one in the ledger twice.
+        val d = dropped(walletTap("ESTACION SERV SAN JOSE", "MX\$500.00 with DIDI Credit Card ••5731"))
+        assertTrue("an expected skip must not flood undecided", !d.fromTrackedSource)
+    }
+
+    @Test
+    fun wallet_tap_on_an_unknown_card_is_left_for_review() {
+        // Never guess an account: a new card shows up in Undecided until it is mapped.
+        val d = dropped(walletTap("OXXO", "MX\$80.00 with Visa ••1234"))
+        assertTrue(d.fromTrackedSource)
+        assertTrue(d.reason, d.reason.contains("1234"))
+    }
+
+    @Test
+    fun wallet_text_without_a_card_is_left_for_review() {
+        val d = dropped(walletTap("Google Wallet", "MX\$80.00 added to your balance"))
+        assertTrue(d.fromTrackedSource)
     }
 
     @Test
